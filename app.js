@@ -7,6 +7,7 @@ import multer from "multer";
 import CustomerRouter from "./routes/CustomerRoute.js";
 import SegmentRouter from "./routes/SegmentRoutes.js";
 import CampaignRouter from "./routes/CampaignRoutes.js";
+import GeminiRouter from "./routes/GeminiRouter.js";
 dotenv.config();
 const app = express();
 
@@ -18,5 +19,6 @@ app.use("/api/user", userrouter);
 app.use("/api/customer", CustomerRouter);
 app.use("/api/segment", SegmentRouter);
 app.use("/api/campaign", CampaignRouter);
+app.use("/api/ai", GeminiRouter);
 
 export default app;

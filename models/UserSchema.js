@@ -16,6 +16,13 @@ const UserSchema = new mongoose.Schema({
     type: String,
     minlength: [8, "Password must be of minimum 8 characters."],
   },
+  isGoogleUser: {
+    type: Boolean,
+    default: false,
+  },
+  googleId: {
+    type: String,
+  },
 });
 
 UserSchema.pre("save", async function (next) {

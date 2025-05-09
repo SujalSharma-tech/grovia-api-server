@@ -3,25 +3,34 @@ import CustomerSegment from "../models/CustomerSegmentSchema.js";
 import Segment from "../models/SegmentSchema.js";
 
 function convertRuleToDBQuery(rule) {
-  if (rule.field && rule.operator && rule.value != undefined) {
+  if (!rule) return {};
+
+  if (rule.field && rule.operator && rule.value !== undefined) {
     const { field, operator, value } = rule;
 
     switch (operator) {
-      case "greaterThan":
-        return { [field]: { $gt: value } };
       case "equal":
         return { [field]: value };
+      case "notEqual":
+        return { [field]: { $ne: value } };
+      case "greaterThan":
+        return { [field]: { $gt: value } };
+      case "greaterThanOrEqual":
+        return { [field]: { $gte: value } };
       case "lessThan":
         return { [field]: { $lt: value } };
+      case "lessThanOrEqual":
+        return { [field]: { $lte: value } };
       default:
+        console.warn(`Unsupported operator: ${operator}`);
         return {};
     }
   }
 
-  if (rule.operator && Array.isArray(rule.conditions)) {
-    const subQueries = rule.conditions.map(convertRuleToDBQuery);
-    const oper = rule.operator === "AND" ? "$and" : "$or";
-    return { [oper]: subQueries };
+  if (Array.isArray(rule.conditions) && rule.operator) {
+    const mongoSubQueries = rule.conditions.map(convertRuleToDBQuery);
+    const mongoOperator = rule.operator === "AND" ? "$and" : "$or";
+    return { [mongoOperator]: mongoSubQueries };
   }
 
   return {};
@@ -32,6 +41,7 @@ export async function createSegmentPreview(req, res) {
 
   try {
     const query = convertRuleToDBQuery(rules);
+    console.log(JSON.stringify(query, null, 2));
     let customers = await Customer.find(query).countDocuments();
     res.json({ customers });
   } catch (err) {
