@@ -2,6 +2,7 @@ import Campaign from "../models/CampaignSchema.js";
 import Customer from "../models/CustomerSchema.js";
 import CustomerSegment from "../models/CustomerSegmentSchema.js";
 import MessageLog from "../models/MessageLogSchema.js";
+import OrganizationMember from "../models/OrganizationMemberSchema.js";
 
 export async function createCampaign(req, res) {
   const { name, content, segment_id } = req.body;
@@ -166,5 +167,50 @@ async function processDelieveryStatus(batchResults) {
     }
   } catch (err) {
     console.error(err);
+  }
+}
+
+export async function getAllOrganizationCampaigns(req, res) {
+  try {
+    const { organizationId } = req.body;
+    const userId = req.user.id;
+
+    const membership = await OrganizationMember.findOne({
+      organizationId,
+      userId,
+    });
+
+    if (!membership) {
+      return res.status(403).json({
+        success: false,
+        message: "You don't have access to this organization",
+      });
+    }
+
+    const userRole = membership.role;
+    const canEdit = userRole === "admin" || userRole === "editor";
+    const canDelete = userRole === "admin";
+
+    let campaigns = await Campaign.find({ organizationId }).sort({
+      createdAt: -1,
+    });
+
+    campaigns = campaigns.map((campaign) => ({
+      ...campaign.toObject(),
+      userRole,
+      canEdit,
+      canDelete,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      data: campaigns,
+    });
+  } catch (err) {
+    console.error("Failed to fetch organization campaigns:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch campaigns",
+    });
   }
 }

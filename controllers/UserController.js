@@ -26,7 +26,11 @@ export async function login(req, res) {
         message: "Invalid password",
       });
     }
-    const token = generateToken({ name: user.fullname, email: user.email });
+    const token = generateToken({
+      id: user._id,
+      name: user.fullname,
+      email: user.email,
+    });
     res.json({
       success: true,
       user: {
@@ -60,7 +64,11 @@ export async function register(req, res) {
         .json({ success: false, message: "User Already Exists!" });
     }
     user = await User.insertOne({ fullname, email, password });
-    const token = generateToken({ name: user.fullname, email: user.email });
+    const token = generateToken({
+      id: user._id,
+      name: user.fullname,
+      email: user.email,
+    });
     res
       .cookie("token", token, {
         maxAge: 7 * 24 * 60 * 60 * 1000,
@@ -114,7 +122,11 @@ export async function handleGoogleLogin(req, res) {
       await user.save();
     }
 
-    const token = generateToken({ name: user.fullname, email: user.email });
+    const token = generateToken({
+      id: user._id,
+      name: user.fullname,
+      email: user.email,
+    });
     res
       .cookie("token", token, {
         maxAge: 7 * 24 * 60 * 60 * 1000,

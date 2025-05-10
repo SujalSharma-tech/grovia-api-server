@@ -30,6 +30,20 @@ const CampaignSchema = new Schema({
   successRate: {
     type: Number,
   },
+  organizationId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Organization",
+    required: true,
+    index: true,
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now,
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now,
+  },
 });
 
 const Campaign = mongoose.model("Campaign", CampaignSchema);

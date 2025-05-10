@@ -22,6 +22,14 @@ const MessageLogs = new mongoose.Schema({
     type: String,
     enum: ["SENT", "FAILED", "PENDING"],
   },
+  createdAt: {
+    type: Date,
+    default: Date.now,
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now,
+  },
 });
 
 const MessageLog = mongoose.model("MessageLog", MessageLogs);

@@ -88,7 +88,9 @@ export async function convertLanguagetoRules(req, res) {
         topP: 0.8,
         topK: 40,
       },
-      systemInstruction,
+      config: {
+        systemInstruction,
+      },
     });
 
     const responseText = response.text;
@@ -102,7 +104,7 @@ export async function convertLanguagetoRules(req, res) {
 
     try {
       const jsonResponse = JSON.parse(cleanedResponse);
-      res.status(200).json({ success: true, message: jsonResponse });
+      res.status(200).json({ success: true, rules: jsonResponse });
     } catch (jsonError) {
       console.error(
         "Error parsing JSON response:",
@@ -149,41 +151,38 @@ export async function generateCampaignMessage(req, res) {
       4. Use a friendly, conversational tone
       5. Include a clear call-to-action
       6. I do not have some other data about user
-    
-      
-      Format your response as a JSON object with an array of message objects:
-      {
-        "messages": [
-          {
-            "id": 1,
-            "content": "Your personalized message with \${name} placeholder (40-50 words)"
-          },
-          {
-            "id": 2, 
-            "content": "Another message variant with \${name} placeholder (40-50 words)"
-          },
-          ...
-        ]
-      }
       
       Return ONLY the valid JSON with no additional text.`,
     };
 
-    const userPrompt = `Generate 2-3 personalized campaign messages for the following objective: "${objective}"
-    
-    Example:
-    objective: I want to offer good discounts to inactive customers
-    response : {
-    "messages" : [
-        {id : 1, content: "hey \${name} personalised message"},{id : 2, content : "personalised message}}
-        ]}
-        
-        STRICTLY DO NOT ADD ANY EXTRA TEXT EXCEPT MESSAGES
-        ${systemInstruction}`;
+    const userPrompt = `Generate 2-3 personalized campaign messages for the following objective: "${objective}"`;
 
     const response = await ai.models.generateContent({
       model: "gemini-2.0-flash",
       contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+      config: {
+        responseMimeType: "application/json",
+        systemInstruction,
+        responseSchema: {
+          type: "object",
+          properties: {
+            messages: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  id: {
+                    type: "number",
+                  },
+                  content: {
+                    type: "string",
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
       generationConfig: {
         temperature: 0.7,
         topP: 0.9,
@@ -192,16 +191,10 @@ export async function generateCampaignMessage(req, res) {
     });
 
     const responseText = response.text;
-    let cleanedResponse = responseText.replace(/```json\n|\n```|```/g, "");
-
-    const jsonMatch = cleanedResponse.match(/(\{.*\})/s);
-    if (jsonMatch && jsonMatch[1]) {
-      cleanedResponse = jsonMatch[1];
-    }
 
     try {
-      const messagedata = JSON.parse(cleanedResponse);
-      res.status(200).json({ success: true, messagedata });
+      const messagedata = JSON.parse(responseText);
+      res.status(200).json({ success: true, messages: messagedata.messages });
     } catch (err) {
       res
         .status(400)

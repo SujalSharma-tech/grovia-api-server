@@ -8,6 +8,7 @@ import CustomerRouter from "./routes/CustomerRoute.js";
 import SegmentRouter from "./routes/SegmentRoutes.js";
 import CampaignRouter from "./routes/CampaignRoutes.js";
 import GeminiRouter from "./routes/GeminiRouter.js";
+import OrganizationRouter from "./routes/OrganizationRouter.js";
 dotenv.config();
 const app = express();
 
@@ -16,6 +17,7 @@ app.use(bodyParser.json());
 app.use(cors());
 export const uploadCSV = multer({ dest: "uploads/" });
 app.use("/api/user", userrouter);
+app.use("/api/organization", OrganizationRouter);
 app.use("/api/customer", CustomerRouter);
 app.use("/api/segment", SegmentRouter);
 app.use("/api/campaign", CampaignRouter);

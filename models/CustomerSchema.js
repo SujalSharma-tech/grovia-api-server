@@ -21,6 +21,16 @@ const CustomerSchema = new mongoose.Schema({
   days_inactive: {
     type: Number,
   },
+  organizationId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Organization",
+    required: true,
+    index: true,
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now,
+  },
 });
 
 const Customer = mongoose.model("Customer", CustomerSchema);

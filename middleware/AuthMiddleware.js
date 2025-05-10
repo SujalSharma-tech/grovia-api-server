@@ -5,8 +5,8 @@ const SECRET = process.env.JWT_SECRET;
 
 import dotenv from "dotenv";
 
-export const generateToken = (name, email) => {
-  return jwt.sign({ name, email }, SECRET, {
+export const generateToken = (user) => {
+  return jwt.sign(user, SECRET, {
     expiresIn: "7d",
   });
 };

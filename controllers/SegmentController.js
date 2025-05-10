@@ -1,6 +1,8 @@
 import Customer from "../models/CustomerSchema.js";
 import CustomerSegment from "../models/CustomerSegmentSchema.js";
 import Segment from "../models/SegmentSchema.js";
+import RecentAction from "../models/RecentActionsSchema.js";
+import OrganizationMember from "../models/OrganizationMemberSchema.js";
 
 function convertRuleToDBQuery(rule) {
   if (!rule) return {};
@@ -51,14 +53,22 @@ export async function createSegmentPreview(req, res) {
 
 export async function createSegment(req, res) {
   const { title, description, rules } = req.body;
+  const { organizationId } = req.params;
+  const userId = req.user.id;
+
   try {
     const query = convertRuleToDBQuery(rules);
     let customers = await Customer.find(query, { _id: 1 }).lean();
     const customerIds = customers.map((cust) => cust._id);
-    if (customerIds.length === 0) {
-      return res.status(200).json({ message: "No customers match the rule." });
-    }
-    let segment = await Segment.insertOne({ title, description, rules });
+
+    let segment = await Segment.insertOne({
+      title,
+      description,
+      rules,
+      organizationId,
+      createdBy: userId,
+    });
+
     if (!segment) {
       return res.status(400).json({ message: "Segment creation failed" });
     }
@@ -80,12 +90,23 @@ export async function createSegment(req, res) {
       $set: { total_customers: totalMapped },
     });
 
+    await RecentAction.create({
+      title: "Segment Created",
+      description: `Segment "${title}" was created`,
+      type: "segment_created",
+      userId: userId,
+      targetActionId: segment._id,
+      targetModel: "Segment",
+    });
+
     res.status(200).json({
       success: true,
-      message: "Customers Added to Segment Successfully",
+      message: "Segment created successfully",
+      data: segment,
     });
   } catch (err) {
     console.error(err);
+    res.status(500).json({ message: "Failed to create segment" });
   }
 }
 
@@ -126,5 +147,41 @@ export async function updateSegment(req, res) {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to update segment" });
+  }
+}
+
+export async function getAllUserSegments(req, res) {
+  const userId = req.user.id;
+
+  try {
+    const memberships = await OrganizationMember.find({ userId });
+    const organizationIds = memberships.map((m) => m.organizationId);
+
+    const segments = await Segment.find({
+      organizationId: { $in: organizationIds },
+    }).populate("organizationId", "name");
+
+    return res.status(200).json({
+      success: true,
+      data: segments,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to fetch segments" });
+  }
+}
+
+export async function getOrganizationSegments(req, res) {
+  const { organizationId } = req.params;
+
+  try {
+    const segments = await Segment.find({ organizationId });
+    return res.status(200).json({
+      success: true,
+      data: segments,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to fetch segments" });
   }
 }
