@@ -2,7 +2,10 @@ import {
   addTeamMember,
   createOrganization,
   getUserOrganizations,
-  getOrganizationStats, // Add this import
+  getOrganizationStats,
+  getRecentActions,
+  getOrganizationMembers,
+  deleteOrganization,
 } from "../controllers/OrganizationController.js";
 import {
   createSegment,
@@ -20,48 +23,12 @@ import express from "express";
 
 const OrganizationRouter = express.Router();
 
-const updateMemberRole = () => {};
-
 OrganizationRouter.post("/organizations", verifyToken, createOrganization)
   .get("/organizations", verifyToken, getUserOrganizations)
-  .post(
-    "/organizations/:organizationId/members",
-    verifyToken,
-    requireAdmin,
-    addTeamMember
-  )
-  .put(
-    "/organizations/:organizationId/members/:memberId",
-    verifyToken,
-    requireAdmin,
-    updateMemberRole
-  )
   .get("/segments", verifyToken, getAllUserSegments)
-  .get(
-    "/organizations/:organizationId/segments",
-    verifyToken,
-    requireViewer,
-    getOrganizationSegments
-  )
-  .post(
-    "/organizations/:organizationId/segments",
-    verifyToken,
-    requireEditor,
-    createSegment
-  )
-  .put(
-    "/organizations/:organizationId/segments/:segmentId",
-    verifyToken,
-    requireEditor,
-    updateSegment
-  )
-  .post("/stats", verifyToken, requireViewer, getOrganizationStats);
-
-//   .delete(
-//     "/organizations/:organizationId/segments/:segmentId",
-//     verifyToken,
-//     requireAdmin,
-//     deleteSegment
-//   );
+  .post("/stats", verifyToken, requireViewer, getOrganizationStats)
+  .post("/recentactions", verifyToken, requireViewer, getRecentActions)
+  .post("/members", verifyToken, requireViewer, getOrganizationMembers)
+  .post("/deleteorganization", verifyToken, requireAdmin, deleteOrganization);
 
 export default OrganizationRouter;

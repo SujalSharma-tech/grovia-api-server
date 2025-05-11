@@ -3,9 +3,12 @@ import Customer from "../models/CustomerSchema.js";
 import CustomerSegment from "../models/CustomerSegmentSchema.js";
 import MessageLog from "../models/MessageLogSchema.js";
 import OrganizationMember from "../models/OrganizationMemberSchema.js";
+import RecentAction from "../models/RecentActionsSchema.js";
+import User from "../models/UserSchema.js";
 
 export async function createCampaign(req, res) {
-  const { name, content, segment_id } = req.body;
+  const { name, content, segment_id, organizationId } = req.body;
+  const userId = req.user.id;
 
   try {
     if (!name || !content || !segment_id) {
@@ -23,19 +26,51 @@ export async function createCampaign(req, res) {
       sent: 0,
       failed: 0,
       successRate: 0,
+      organizationId,
     });
 
-    await prepareBatches(campaign._id, segment_id, content);
+    await prepareBatches(
+      campaign._id,
+      segment_id,
+      content,
+      name,
+      organizationId,
+      userId
+    );
 
-    res
-      .status(200)
-      .json({ success: true, message: "Campaign Created Successfully" });
+    const data = await RecentAction.create({
+      title: "Campaign Created",
+      description: `New Campaign '${name}' was created!`,
+      type: "campaign_created",
+      organizationId: organizationId,
+      createdBy: {
+        email: req.user.email,
+        fullname: req.user.name,
+      },
+      userId: userId,
+      targetActionId: campaign._id,
+      targetModel: "Campaign",
+    });
+    console.log(data);
+
+    res.status(200).json({
+      success: true,
+      message: "Campaign Created Successfully",
+      data: { campaign },
+    });
   } catch (err) {
     return res.status(400).json({ message: "Invalid request" });
   }
 }
 
-async function prepareBatches(campaignId, segmentId, content) {
+async function prepareBatches(
+  campaignId,
+  segmentId,
+  content,
+  name,
+  organizationId,
+  userId
+) {
   const customerSeg = await CustomerSegment.find({ segment_id: segmentId });
   const customerIds = customerSeg.map((cus) => cus.customer_id);
   const customers = await Customer.find({ _id: { $in: customerIds } });
@@ -63,7 +98,10 @@ async function prepareBatches(campaignId, segmentId, content) {
       batch_indx,
       totalBatches,
       current_customers,
-      content
+      content,
+      name,
+      organizationId,
+      userId
     );
   }
 }
@@ -74,7 +112,10 @@ async function processBatch(
   batch_indx,
   totalBatches,
   current_customers,
-  content
+  content,
+  name,
+  organizationId,
+  userId
 ) {
   try {
     const messageLogs = current_customers.map((customer) => ({
@@ -110,13 +151,18 @@ async function processBatch(
       });
     }
 
-    await processDelieveryStatus(batchResults);
+    await processDelieveryStatus(batchResults, name, organizationId, userId);
   } catch (err) {
     console.error(err);
   }
 }
 
-async function processDelieveryStatus(batchResults) {
+async function processDelieveryStatus(
+  batchResults,
+  name,
+  organizationId,
+  userId
+) {
   const { campaignId, batch_indx, totalBatches, messageResults } = batchResults;
   try {
     const bulkAdd = messageResults.map((result) => ({
@@ -150,6 +196,17 @@ async function processDelieveryStatus(batchResults) {
 
       if (isComplete) {
         updates.status = "COMPLETED";
+        const user = await User.findById(userId);
+        await RecentAction.create({
+          title: "Campaign Sent",
+          description: `Sent campaign ${name} to ${updatedCampaign.sent} recipients`,
+          type: "campaign_sent",
+          createdBy: { email: user._id, fullname: user.fullname },
+          userId: userId,
+          organizationId: organizationId,
+          targetActionId: updatedCampaign._id,
+          targetModel: "Campaign",
+        });
       }
 
       await Campaign.findByIdAndUpdate(campaignId, { $set: updates });
@@ -211,6 +268,48 @@ export async function getAllOrganizationCampaigns(req, res) {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch campaigns",
+    });
+  }
+}
+
+export async function deleteCampaign(req, res) {
+  const { campaignId, organizationId } = req.body;
+  const userId = req.user.id;
+
+  try {
+    const campaign = await Campaign.findById(campaignId);
+
+    if (!campaign) {
+      return res.status(404).json({
+        success: false,
+        message: "Campaign not found",
+      });
+    }
+
+    await Campaign.findByIdAndDelete(campaignId);
+
+    await RecentAction.create({
+      title: "Campaign Deleted",
+      description: `Campaign "${campaign.name}" was deleted`,
+      type: "campaign_deleted",
+      organizationId: organizationId,
+      userId,
+      createdBy: {
+        email: req.user.email,
+        fullname: req.user.name,
+      },
+      targetModel: "Campaign",
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Campaign deleted successfully",
+    });
+  } catch (err) {
+    console.error("Failed to delete campaign:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete campaign",
     });
   }
 }

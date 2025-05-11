@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+import mongoose, { Schema } from "mongoose";
 
 const OrganizationSchema = new mongoose.Schema({
   name: {
@@ -8,6 +8,10 @@ const OrganizationSchema = new mongoose.Schema({
   },
   description: {
     type: String,
+  },
+  organizationId: {
+    type: Schema.Types.ObjectId,
+    ref: "Organization",
   },
   owner: {
     type: mongoose.Schema.Types.ObjectId,

@@ -24,6 +24,18 @@ const RecentActionModel = new mongoose.Schema({
     required: true,
     index: true,
   },
+  createdBy: {
+    fullname: {
+      type: String,
+    },
+    email: {
+      type: String,
+    },
+  },
+  organizationId: {
+    type: Schema.Types.ObjectId,
+    ref: "Organization",
+  },
   targetActionId: {
     type: Schema.Types.ObjectId,
     ref: "targetModel",

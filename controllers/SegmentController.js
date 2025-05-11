@@ -43,17 +43,15 @@ export async function createSegmentPreview(req, res) {
 
   try {
     const query = convertRuleToDBQuery(rules);
-    console.log(JSON.stringify(query, null, 2));
     let customers = await Customer.find(query).countDocuments();
-    res.json({ customers });
+    res.json({ success: true, data: { customers } });
   } catch (err) {
     console.error(err);
   }
 }
 
 export async function createSegment(req, res) {
-  const { title, description, rules } = req.body;
-  const { organizationId } = req.params;
+  const { title, description, rules, organizationId } = req.body;
   const userId = req.user.id;
 
   try {
@@ -94,6 +92,11 @@ export async function createSegment(req, res) {
       title: "Segment Created",
       description: `Segment "${title}" was created`,
       type: "segment_created",
+      organizationId: organizationId,
+      createdBy: {
+        email: req.user.email,
+        fullname: req.user.name,
+      },
       userId: userId,
       targetActionId: segment._id,
       targetModel: "Segment",
@@ -172,10 +175,24 @@ export async function getAllUserSegments(req, res) {
 }
 
 export async function getOrganizationSegments(req, res) {
-  const { organizationId } = req.params;
+  const { organizationId } = req.body;
+  const userId = req.user.id;
 
   try {
-    const segments = await Segment.find({ organizationId });
+    const userRole = req.userRole;
+    const canEdit = userRole === "admin" || userRole === "editor";
+    const canDelete = userRole === "admin";
+
+    let segments = await Segment.find({ organizationId }).sort({
+      updatedAt: -1,
+    });
+
+    segments = segments.map((segment) => ({
+      ...segment.toObject(),
+      userRole,
+      canEdit,
+      canDelete,
+    }));
     return res.status(200).json({
       success: true,
       data: segments,
@@ -183,5 +200,49 @@ export async function getOrganizationSegments(req, res) {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to fetch segments" });
+  }
+}
+
+export async function deleteSegment(req, res) {
+  const { segmentId, organizationId } = req.body;
+  const userId = req.user.id;
+
+  try {
+    const segment = await Segment.findById(segmentId);
+
+    if (!segment) {
+      return res.status(404).json({
+        success: false,
+        message: "Segment not found",
+      });
+    }
+
+    await CustomerSegment.deleteMany({ segment_id: segmentId });
+
+    await Segment.findByIdAndDelete(segmentId);
+
+    await RecentAction.create({
+      title: "Segment Deleted",
+      description: `Segment "${segment.title}" was deleted`,
+      type: "segment_deleted",
+      organizationId,
+      userId,
+      createdBy: {
+        email: req.user.email,
+        fullname: req.user.name,
+      },
+      targetModel: "Segment",
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Segment deleted successfully",
+    });
+  } catch (err) {
+    console.error("Failed to delete segment:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete segment",
+    });
   }
 }

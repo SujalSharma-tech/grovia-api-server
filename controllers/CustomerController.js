@@ -3,6 +3,7 @@ import fs from "fs";
 import csv from "csv-parser";
 import Customer from "../models/CustomerSchema.js";
 import { fileURLToPath } from "url";
+import RecentAction from "../models/RecentActionsSchema.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,6 +39,18 @@ export async function handleCsvUploads(req, res) {
     .on("end", async () => {
       try {
         await Customer.insertMany(results);
+        await RecentAction.create({
+          title: "Customer Import",
+          description: `Imported 156 customers from CSV file`,
+          type: "add_customer",
+          organizationId,
+          userId,
+          createdBy: {
+            email: req.user.email,
+            fullname: req.user.name,
+          },
+        });
+
         fs.unlinkSync(filepath);
         res.status(201).send({
           success: true,
@@ -59,7 +72,9 @@ export async function createCustomer(req, res) {
     lastpurchase_day,
     totalspend,
     days_inactive,
+    organizationId,
   } = req.body;
+  const userId = req.user.id;
 
   try {
     if (!name || !email) {
@@ -80,12 +95,29 @@ export async function createCustomer(req, res) {
       visit_count,
       lastpurchase_day,
       totalspend,
+      organizationId,
       days_inactive,
     });
 
-    res
-      .status(200)
-      .json({ success: true, message: "Customer added successfully" });
+    await RecentAction.create({
+      title: "Customer Added",
+      description: `Customer '${customer.name}' added`,
+      type: "add_customer",
+      organizationId,
+      userId,
+      createdBy: {
+        email: req.user.email,
+        fullname: req.user.name,
+      },
+      targetActionId: customer._id,
+      targetModel: "Customer",
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Customer added successfully",
+      data: { customer },
+    });
   } catch (err) {
     res.status(400).json({ success: false, message: `Invalid request ${err}` });
   }
