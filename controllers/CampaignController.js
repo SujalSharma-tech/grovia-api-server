@@ -37,6 +37,10 @@ export async function createCampaign(req, res) {
       userId,
       organizationId,
       type: "campaign_created",
+      createdBy: {
+        fullname: req.user.name,
+        email: req.user.email,
+      },
       targetActionId: campaign._id,
       targetModel: "Campaign",
     };
