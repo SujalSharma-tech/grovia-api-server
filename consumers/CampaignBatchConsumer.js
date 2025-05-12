@@ -219,7 +219,7 @@ async function processDelieveryStatus(
           title: "Campaign Sent",
           description: `Sent campaign ${name} to ${updatedCampaign.sent} recipients`,
           type: "campaign_sent",
-          createdBy: { email: user._id, fullname: user.fullname },
+          createdBy: { email: user.email, fullname: user.fullname },
           userId: userId,
           organizationId: organizationId,
           targetActionId: updatedCampaign._id,
