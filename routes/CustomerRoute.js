@@ -5,6 +5,7 @@ import {
 } from "../controllers/CustomerController.js";
 import multer from "multer";
 import { verifyToken } from "../middleware/AuthMiddleware.js";
+import { requireEditor } from "../middleware/RoleMiddleware.js";
 export const uploadCSV = multer({ dest: "uploads/" });
 
 const CustomerRouter = express.Router();
@@ -14,6 +15,6 @@ CustomerRouter.post(
   verifyToken,
   uploadCSV.single("file"),
   handleCsvUploads
-).post("/insertcustomer", verifyToken, createCustomer);
+).post("/insertcustomer", verifyToken, requireEditor, createCustomer);
 
 export default CustomerRouter;

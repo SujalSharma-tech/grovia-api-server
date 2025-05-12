@@ -1,8 +1,8 @@
 import Customer from "../models/CustomerSchema.js";
 import CustomerSegment from "../models/CustomerSegmentSchema.js";
 import Segment from "../models/SegmentSchema.js";
-import RecentAction from "../models/RecentActionsSchema.js";
 import OrganizationMember from "../models/OrganizationMemberSchema.js";
+import kafkaService from "../services/KafkaService.js";
 
 function convertRuleToDBQuery(rule) {
   if (!rule) return {};
@@ -59,12 +59,13 @@ export async function createSegment(req, res) {
     let customers = await Customer.find(query, { _id: 1 }).lean();
     const customerIds = customers.map((cust) => cust._id);
 
-    let segment = await Segment.insertOne({
+    let segment = await Segment.create({
       title,
       description,
       rules,
       organizationId,
       createdBy: userId,
+      total_customers: customers.length,
     });
 
     if (!segment) {
@@ -80,15 +81,7 @@ export async function createSegment(req, res) {
       { ordered: false }
     );
 
-    const totalMapped = await CustomerSegment.countDocuments({
-      segment_id: segment._id,
-    });
-
-    await Segment.findByIdAndUpdate(segment._id, {
-      $set: { total_customers: totalMapped },
-    });
-
-    await RecentAction.create({
+    const action = {
       title: "Segment Created",
       description: `Segment "${title}" was created`,
       type: "segment_created",
@@ -100,7 +93,9 @@ export async function createSegment(req, res) {
       userId: userId,
       targetActionId: segment._id,
       targetModel: "Segment",
-    });
+    };
+
+    await kafkaService.publishActivity(action);
 
     res.status(200).json({
       success: true,
@@ -114,22 +109,31 @@ export async function createSegment(req, res) {
 }
 
 export async function updateSegment(req, res) {
-  const { segmentId } = req.params;
-  const { title, description, rules } = req.body;
+  const { title, description, rules, segmentId, organizationId } = req.body;
 
   try {
+    if (!title || !description || !segmentId || !rules) {
+      return res.status(400).json({
+        message: "Title, Description, segmentId and rules are required",
+        success: false,
+      });
+    }
     const query = convertRuleToDBQuery(rules);
 
     const customers = await Customer.find(query, { _id: 1 }).lean();
     const customerIds = customers.map((customer) => customer._id);
 
-    await Segment.findByIdAndUpdate(segmentId, {
-      $set: {
-        title,
-        description,
-        rules,
+    const segment = await Segment.findByIdAndUpdate(
+      segmentId,
+      {
+        $set: {
+          title,
+          description,
+          rules,
+        },
       },
-    });
+      { new: true }
+    );
 
     await CustomerSegment.deleteMany({ segment_id: segmentId });
 
@@ -143,9 +147,25 @@ export async function updateSegment(req, res) {
       $set: { total_customers: customerIds.length },
     });
 
+    const action = {
+      title: "Segment Updated",
+      description: `Segment "${title}" was updated`,
+      type: "segment_updated",
+      organizationId: organizationId,
+      createdBy: {
+        email: req.user.email,
+        fullname: req.user.name,
+      },
+      userId: req.user.id,
+      targetActionId: segment._id,
+      targetModel: "Segment",
+    };
+    await kafkaService.publishActivity(action);
+
     return res.status(200).json({
       message: "Segment updated and remapped successfully",
       total_customers: customerIds.length,
+      success: true,
     });
   } catch (err) {
     console.error(err);
@@ -216,12 +236,15 @@ export async function deleteSegment(req, res) {
         message: "Segment not found",
       });
     }
-
-    await CustomerSegment.deleteMany({ segment_id: segmentId });
+    const publishSegmentDelete = await kafkaService.publishSegmentDelete(
+      segmentId
+    );
+    if (!publishSegmentDelete) {
+      console.log("Error publishing deleting message");
+    }
 
     await Segment.findByIdAndDelete(segmentId);
-
-    await RecentAction.create({
+    const action = {
       title: "Segment Deleted",
       description: `Segment "${segment.title}" was deleted`,
       type: "segment_deleted",
@@ -232,7 +255,8 @@ export async function deleteSegment(req, res) {
         fullname: req.user.name,
       },
       targetModel: "Segment",
-    });
+    };
+    await kafkaService.publishActivity(action);
 
     return res.status(200).json({
       success: true,

@@ -3,6 +3,7 @@ import User from "../models/UserSchema.js";
 import Organization from "../models/OrganizationSchema.js";
 import OrganizationMember from "../models/OrganizationMemberSchema.js";
 import RecentAction from "../models/RecentActionsSchema.js";
+import kafkaService from "../services/KafkaService.js";
 
 export async function createInvite(req, res) {
   const { email, role, organizationId } = req.body;
@@ -56,8 +57,7 @@ export async function createInvite(req, res) {
       inviteeId: user._id,
       role,
     });
-
-    await RecentAction.create({
+    const action = {
       title: "Invite Sent",
       description: `Invitation sent to ${user.fullname} to join as ${role}`,
       type: "invite_sent",
@@ -67,7 +67,8 @@ export async function createInvite(req, res) {
         email: req.user.email,
         fullname: req.user.name,
       },
-    });
+    };
+    await kafkaService.publishActivity(action);
 
     return res.status(200).json({
       success: true,
@@ -134,8 +135,7 @@ export async function acceptInvite(req, res) {
 
     invite.status = "accepted";
     await invite.save();
-
-    await RecentAction.create({
+    const action = {
       title: "Joined Organization",
       description: `Joined ${invite.organizationId.name} as ${invite.role}`,
       type: "invite_accepted",
@@ -145,7 +145,9 @@ export async function acceptInvite(req, res) {
         email: req.user.email,
         fullname: req.user.name,
       },
-    });
+    };
+
+    await kafkaService.publishActivity(action);
 
     return res.status(200).json({
       success: true,

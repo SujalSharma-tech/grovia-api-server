@@ -8,6 +8,7 @@ import Campaign from "../models/CampaignSchema.js";
 import mongoose from "mongoose";
 import Invite from "../models/InvitesModel.js";
 import CustomerSegment from "../models/CustomerSegmentSchema.js";
+import kafkaService from "../services/KafkaService.js";
 
 export async function getOrganizationMembers(req, res) {
   const { organizationId } = req.body;
@@ -141,7 +142,7 @@ export async function createOrganization(req, res) {
       role: "admin",
     });
 
-    await RecentAction.create({
+    const action = {
       title: "Organization Created",
       description: `Organization "${name}" was created`,
       type: "organization_created",
@@ -149,7 +150,9 @@ export async function createOrganization(req, res) {
       targetActionId: organization._id,
       organizationId: organization._id,
       targetModel: "Organization",
-    });
+    };
+
+    await kafkaService.publishActivity(action);
 
     return res.status(201).json({
       success: true,
@@ -158,47 +161,6 @@ export async function createOrganization(req, res) {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to create organization" });
-  }
-}
-
-export async function addTeamMember(req, res) {
-  const { organizationId } = req.params;
-  const { email, role } = req.body;
-  const inviterId = req.user.id;
-
-  try {
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    await OrganizationMember.create({
-      organizationId,
-      userId: user._id,
-      role,
-    });
-
-    await RecentAction.create({
-      title: "Team Member Added",
-      description: `${user.fullname} was added as ${role}`,
-      type: "member_added",
-      userId: inviterId,
-      targetActionId: organizationId,
-      organizationId,
-      createdBy: {
-        email: req.user.email,
-        fullname: req.user.name,
-      },
-      targetModel: "Organization",
-    });
-
-    return res.status(200).json({
-      success: true,
-      message: "Team member added successfully",
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Failed to add team member" });
   }
 }
 

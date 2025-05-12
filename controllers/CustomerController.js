@@ -4,14 +4,46 @@ import csv from "csv-parser";
 import Customer from "../models/CustomerSchema.js";
 import { fileURLToPath } from "url";
 import RecentAction from "../models/RecentActionsSchema.js";
+import kafkaService from "../services/KafkaService.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export async function handleCsvUploads(req, res) {
+  const { organizationId } = req.body;
+  const userId = req.user.id;
+
   const results = [];
+  const requiredHeaders = [
+    "name",
+    "email",
+    "visit_count",
+    "lastpurchase_day",
+    "totalspend",
+    "days_inactive",
+  ];
 
   const filepath = path.join(__dirname, "..", req.file.path);
+  const firstLine = fs
+    .readFileSync(filepath, "utf-8")
+    .split("\n")[0]
+    .toLowerCase();
+  const hasHeaders = firstLine.includes("name") && firstLine.includes("email");
+  if (hasHeaders) {
+    const headerFields = firstLine.split(",").map((field) => field.trim());
+    const missingHeaders = requiredHeaders.filter(
+      (field) => !headerFields.includes(field)
+    );
+
+    if (missingHeaders.length > 0) {
+      fs.unlinkSync(filepath);
+      return res.status(400).json({
+        success: false,
+        message: `CSV missing required headers: ${missingHeaders.join(", ")}`,
+        requiredFormat: requiredHeaders.join(", "),
+      });
+    }
+  }
 
   fs.createReadStream(filepath)
     .pipe(
@@ -24,6 +56,7 @@ export async function handleCsvUploads(req, res) {
           "totalspend",
           "days_inactive",
         ],
+        skipLines: hasHeaders ? 1 : 0,
       })
     )
     .on("data", (data) => {
@@ -34,6 +67,7 @@ export async function handleCsvUploads(req, res) {
         lastpurchase_day: Number(data.lastpurchase_day) || 0,
         totalspend: Number(data.totalspend) || 0,
         days_inactive: Number(data.days_inactive) || 0,
+        organizationId,
       });
     })
     .on("end", async () => {
@@ -41,7 +75,7 @@ export async function handleCsvUploads(req, res) {
         await Customer.insertMany(results);
         await RecentAction.create({
           title: "Customer Import",
-          description: `Imported 156 customers from CSV file`,
+          description: `Imported ${results.length} customers from CSV file`,
           type: "add_customer",
           organizationId,
           userId,
@@ -99,7 +133,7 @@ export async function createCustomer(req, res) {
       days_inactive,
     });
 
-    await RecentAction.create({
+    const action = {
       title: "Customer Added",
       description: `Customer '${customer.name}' added`,
       type: "add_customer",
@@ -111,7 +145,24 @@ export async function createCustomer(req, res) {
       },
       targetActionId: customer._id,
       targetModel: "Customer",
-    });
+    };
+
+    const published = await kafkaService.publishActivity(action);
+    if (!published) {
+      await RecentAction.create({
+        title: "Customer Added",
+        description: `Customer '${customer.name}' added`,
+        type: "add_customer",
+        organizationId,
+        userId,
+        createdBy: {
+          email: req.user.email,
+          fullname: req.user.name,
+        },
+        targetActionId: customer._id,
+        targetModel: "Customer",
+      });
+    }
 
     res.status(200).json({
       success: true,

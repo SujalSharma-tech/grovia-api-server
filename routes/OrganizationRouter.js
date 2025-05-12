@@ -1,5 +1,4 @@
 import {
-  addTeamMember,
   createOrganization,
   getUserOrganizations,
   getOrganizationStats,
@@ -7,18 +6,9 @@ import {
   getOrganizationMembers,
   deleteOrganization,
 } from "../controllers/OrganizationController.js";
-import {
-  createSegment,
-  getAllUserSegments,
-  getOrganizationSegments,
-  updateSegment,
-} from "../controllers/SegmentController.js";
+import { getAllUserSegments } from "../controllers/SegmentController.js";
 import { verifyToken } from "../middleware/AuthMiddleware.js";
-import {
-  requireAdmin,
-  requireEditor,
-  requireViewer,
-} from "../middleware/RoleMiddleware.js";
+import { requireAdmin, requireViewer } from "../middleware/RoleMiddleware.js";
 import express from "express";
 
 const OrganizationRouter = express.Router();

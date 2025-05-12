@@ -1,5 +1,7 @@
 import mongoose from "mongoose";
 import Campaign from "../models/CampaignSchema.js";
+import dotenv from "dotenv";
+dotenv.config();
 
 function dbConnect() {
   mongoose
