@@ -29,12 +29,16 @@ try {
   });
   await consumer.run({
     eachMessage: async ({ topic, partition, message }) => {
-      try {
-        const segmentObj = JSON.parse(message.value.toString());
-        const segmentId = segmentObj.segment_id;
-        await CustomerSegment.deleteMany({ segment_id: segmentId });
-      } catch (err) {
-        console.error(err);
+      switch (topic) {
+        case "segment-topic":
+          try {
+            const segmentObj = JSON.parse(message.value.toString());
+            const segmentId = segmentObj.segment_id;
+            await CustomerSegment.deleteMany({ segment_id: segmentId });
+          } catch (err) {
+            console.error(err);
+          }
+          break;
       }
     },
   });

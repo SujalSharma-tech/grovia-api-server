@@ -9,6 +9,8 @@ import Campaign from "../models/CampaignSchema.js";
 import User from "../models/UserSchema.js";
 import MessageLog from "../models/MessageLogSchema.js";
 import Customer from "../models/CustomerSchema.js";
+import InsightModel from "../models/InsightsSchema.js";
+import { GoogleGenAI } from "@google/genai";
 
 dbConnect();
 
@@ -35,6 +37,11 @@ try {
 
   await consumer.subscribe({
     topic: "message-log-topic",
+    fromBeginning: true,
+  });
+
+  await consumer.subscribe({
+    topic: "insights-topic",
     fromBeginning: true,
   });
 
@@ -77,6 +84,10 @@ try {
             console.error("Error deleting message log:", err);
           }
           break;
+        case "insights-topic":
+          const dataObj = JSON.parse(message.value.toString());
+          const { organizationId, insightId } = dataObj;
+          await generateCampaignInsights(organizationId, insightId);
       }
     },
   });
@@ -246,6 +257,151 @@ async function processDelieveryStatus(
   }
 }
 
+export async function generateCampaignInsights(organizationId, insightId) {
+  try {
+    const campaigns = await Campaign.find({
+      organizationId,
+      status: { $in: ["COMPLETED"] },
+    }).sort({ createdAt: -1 });
+
+    if (campaigns.length === 0) {
+      await InsightModel.findByIdAndUpdate({
+        _id: new mongoose.Types.ObjectId(insightId),
+      });
+    }
+
+    const campaignInsights = [];
+    for (const campaign of campaigns) {
+      const messageLogs = await MessageLog.find({
+        campaign_id: campaign._id,
+      });
+      if (messageLogs.length === 0) continue;
+      const customerIds = messageLogs.map((log) => log._id);
+      const customers = await Customer.find({ _id: { $in: customerIds } });
+
+      const campaignData = {
+        campaignId: campaign._id.toString(),
+        name: campaign.name,
+        createdAt: campaign.createdAt,
+        basics: {
+          totalRecipients: campaign.audience_size || 0,
+          delivered: campaign.sent || 0,
+          failed: campaign.failed || 0,
+          deliveryRate: campaign.successRate,
+        },
+        segments: [],
+      };
+      const highSpenders = customers.filter((c) => c.totalspend > 100);
+      if (highSpenders.length > 0) {
+        const highSpenderIds = highSpenders.map((c) => c._id.toString());
+        const highSpenderLogs = messageLogs.filter((log) =>
+          highSpenderIds.includes(log.user_id.toString())
+        );
+        const delivered = highSpenderLogs.filter(
+          (log) => log.status === "SENT"
+        ).length;
+
+        campaignData.segments.push({
+          name: "High Spenders (>$100)",
+          recipients: highSpenderLogs.length,
+          delivered,
+          deliveryRate:
+            delivered > 0
+              ? ((delivered / highSpenderLogs.length) * 100).toFixed(1) + "%"
+              : "0%",
+        });
+      }
+
+      const recentCustomers = customers.filter((c) => c.lastpurchase_day < 20);
+      if (recentCustomers.length > 0) {
+        const recentCustomerIds = recentCustomers.map((c) => c._id.toString());
+        const recentCustomerLogs = messageLogs.filter((log) =>
+          recentCustomerIds.includes(log.user_id.toString())
+        );
+        const delivered = recentCustomerLogs.filter(
+          (log) => log.status === "SENT"
+        ).length;
+
+        campaignData.segments.push({
+          name: "Recent Customers (last 20 days)",
+          recipients: recentCustomerLogs.length,
+          delivered,
+          deliveryRate:
+            delivered > 0
+              ? ((delivered / recentCustomerLogs.length) * 100).toFixed(1) + "%"
+              : "0%",
+        });
+      }
+      campaignInsights.push(campaignData);
+    }
+
+    const orgData = {
+      totalCampaigns: campaignInsights.length,
+      totalRecipients: campaignInsights.reduce(
+        (sum, cus) => sum + cus.basics.totalRecipients,
+        0
+      ),
+      totalDelivered: campaignInsights.reduce(
+        (sum, cus) => sum + cus.basics.delivered,
+        0
+      ),
+      averageDeliveryRate:
+        campaignInsights.length > 0
+          ? (
+              campaignInsights.reduce(
+                (sum, c) =>
+                  sum + (c.basics.delivered / c.basics.totalRecipients) * 100,
+                0
+              ) / campaignInsights.length
+            ).toFixed(1) + "%"
+          : "0%",
+      bestPerformingCampaign:
+        campaignInsights.length > 0
+          ? campaignInsights.reduce((best, current) => {
+              const bestRate =
+                best.basics.delivered / best.basics.totalRecipients;
+              const currentRate =
+                current.basics.delivered / current.basics.totalRecipients;
+              return currentRate > bestRate ? current : best;
+            })
+          : null,
+      campaigns: campaignInsights,
+    };
+    const ai = new GoogleGenAI({ apiKey: envconfig.geminiApi });
+    const systemInstruction = {
+      text: `You are a marketing analytics expert who provides concise, insightful summaries of campaign performance.
+      Create an overview of all campaigns with a focus on delivery rates, audience engagement across segments, and trends.
+      Start with a high-level overview of all campaigns, then briefly mention notable insights for individual campaigns.
+      Include specific numbers and percentages. Use a professional but conversational tone.
+      Example: "Your 5 campaigns reached 6,450 users with an average delivery rate of 88.5%. The 'Summer Sale' campaign had the best performance with a 93.2% delivery rate. High-spending customers consistently show 15% better engagement than other segments."
+      STRICTLY DO NOT USE FORMATING GIVE PLAIN PARAGRAPHS GIVE MORE INSIGHTS`,
+    };
+    const userPrompt = `Generate insights for this organization's campaign data:
+    ${JSON.stringify(orgData, null, 2)}`;
+    const response = await ai.models.generateContent({
+      model: "gemini-2.0-flash",
+      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+      generationConfig: {
+        temperature: 0.1,
+        topP: 0.8,
+        topK: 40,
+      },
+      config: {
+        systemInstruction,
+      },
+    });
+
+    const insightsdata = response.text;
+    await InsightModel.findByIdAndUpdate(insightId, {
+      $set: {
+        status: "COMPLETED",
+        content: insightsdata,
+      },
+    });
+  } catch (err) {
+    console.log(err);
+  }
+}
 process.on("SIGTERM", async () => {
   console.log("Shutting down consumer");
   await consumer.disconnect();

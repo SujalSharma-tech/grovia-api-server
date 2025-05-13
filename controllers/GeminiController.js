@@ -1,4 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
+import InsightModel from "../models/InsightsSchema.js";
+import kafkaService from "../services/KafkaService.js";
 
 const ai = new GoogleGenAI({ apiKey: `${process.env.GOOGLE_GEMINI_API}` });
 
@@ -202,6 +204,35 @@ export async function generateCampaignMessage(req, res) {
     }
   } catch (err) {
     console.error(err);
+    res.status(500).json({ success: false, error: "Internal Server Error" });
+  }
+}
+
+export async function generateInsights(req, res) {
+  const { organizationId } = req.body;
+  try {
+    const insight = await InsightModel.create({
+      status: "PENDING",
+      organizationId: organizationId,
+    });
+    const data = { insightId: insight._id, organizationId };
+
+    await kafkaService.publishInsightData(data);
+    res.status(201).json({ success: true, data: insight });
+  } catch (err) {}
+}
+
+export async function fetchInsightsStatus(req, res) {
+  const { insightId } = req.body;
+  try {
+    const insight = await InsightModel.findById(insightId);
+    if (!insight) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Insight Not found" });
+    }
+    res.status(200).json({ success: true, data: insight });
+  } catch (err) {
     res.status(500).json({ success: false, error: "Internal Server Error" });
   }
 }

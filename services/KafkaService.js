@@ -96,6 +96,25 @@ class KafkaService {
     }
   }
 
+  async publishInsightData(data) {
+    try {
+      if (!this.isConnected) {
+        await this.producerConnect();
+      }
+      await this.producer.send({
+        topic: "insights-topic",
+        messages: [{ key: "insights", value: JSON.stringify(data) }],
+      });
+      console.log(data);
+      console.log("published insights data");
+
+      return true;
+    } catch (err) {
+      console.log(`Error publishing insights data: ${err}`);
+      return false;
+    }
+  }
+
   async publishDelete(campaignId) {
     try {
       if (!this.isConnected) {

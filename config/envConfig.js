@@ -14,4 +14,5 @@ export default {
     saslPass: process.env.SASL_PASS,
   },
   mongoUri: process.env.MONGO_URI,
+  geminiApi: process.env.GOOGLE_GEMINI_API,
 };

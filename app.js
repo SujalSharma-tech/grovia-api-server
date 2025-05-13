@@ -15,7 +15,13 @@ const app = express();
 
 app.use(express.json());
 app.use(bodyParser.json());
-app.use(cors());
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL,
+    credentials: true,
+    methods: ["GET", "POST", "OPTIONS"],
+  })
+);
 export const uploadCSV = multer({ dest: "uploads/" });
 app.use("/api/user", userrouter);
 app.use("/api/organization", OrganizationRouter);
