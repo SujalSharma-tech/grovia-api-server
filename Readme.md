@@ -176,6 +176,7 @@ The platform uses Kafka to handle asynchronous processing for intensive operatio
 - **MongoDB Atlas**: Cloud database service
 - **Aiven**: Managed Kafka service
 - **Express Middleware**: Request processing pipeline
+- **Heroku Platform**: Backend hosting and kafka consumers
 
 ## Security Considerations
 
