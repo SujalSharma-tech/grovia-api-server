@@ -149,6 +149,10 @@ export async function createOrganization(req, res) {
       userId,
       targetActionId: organization._id,
       organizationId: organization._id,
+      createdBy: {
+        fullname: req.user.name,
+        email: req.user.email,
+      },
       targetModel: "Organization",
     };
 
